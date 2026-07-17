@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>K12 知识图谱学习工具</title>
+
+  <!-- ===== 1. CDN 引入：Tailwind CSS / Cytoscape.js / Papaparse ===== -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <!-- Tailwind 自定义配置：扩展深色主题色与字体 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            // 自定义品牌色（青蓝系，契合学习/科技感）
+            brand: {
+              50:  '#eef9ff',
+              100: '#d9f0ff',
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+            }
+          },
+          fontFamily: {
+            sans: ['"PingFang SC"', '"Microsoft YaHei"', 'system-ui', 'sans-serif']
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- ===== 2. 自定义 CSS：滚动条 / 拖拽高亮 / 动画 ===== -->
+  <style>
+    /* 全局基础样式：深色主题底色 */
+    html, body { height: 100%; }
+    body {
+      background-color: #0f172a; /* slate-900 */
+      color: #e2e8f0;            /* slate-200 */
+      overflow: hidden;          /* 由内部容器滚动，避免整页滚动条 */
+    }
+
+    /* 自定义滚动条（webkit 内核） */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #1e293b; }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+    /* 拖拽悬停高亮态（给上传区用） */
+    .drag-active {
+      border-color: #38bdf8 !important;
+      background-color: rgba(56, 189, 248, 0.08) !important;
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+    }
+
+    /* 旋转动画（解析中状态指示） */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 0.8s linear infinite; }
+
+    /* 主内容区 Cytoscape 容器（第二阶段启用，第一阶段隐藏） */
+    #cy {
+      width: 100%;
+      height: 100%;
+      background-color: #0b1220;
+    }
+
+    /* 统计数字强调色 */
+    .stat-num { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+
+<!-- ===== 3. Body：整体布局骨架 ===== -->
+<body class="flex flex-col h-screen select-none">
+
+  <!-- ==================== 顶部导航栏 ==================== -->
+  <header class="h-14 flex items-center justify-between px-5 bg-slate-800/70 border-b border-slate-700 backdrop-blur-sm shrink-0">
+    <!-- 左侧：Logo + 标题 -->
+    <div class="flex items-center gap-3">
+      <!-- SVG Logo（书本+节点图标） -->
+      <svg class="w-8 h-8 text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+        <circle cx="9" cy="8" r="1.2" fill="currentColor" />
+        <circle cx="15" cy="11" r="1.2" fill="currentColor" />
+        <line x1="9.5" y1="9.2" x2="14.5" y2="9.8" />
+      </svg>
+      <h1 class="text-lg font-semibold tracking-wide text-slate-100">K12 知识图谱学习工具</h1>
+    </div>
+
+    <!-- 右侧：主题切换按钮（占位，第二阶段实现） -->
+    <button id="themeToggle" class="px-3 py-1.5 text-sm rounded-md bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors" title="切换主题（即将上线）">
+      🌙 深色
+    </button>
+  </header>
+
+  <!-- ==================== 主体区域（侧栏 + 主内容） ==================== -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- ========== 左侧边栏 ========== -->
+    <aside class="w-72 md:w-80 bg-slate-800/40 border-r border-slate-700 flex flex-col overflow-y-auto shrink-0">
+
+      <!-- 分区标题：数据加载 -->
+      <div class="px-4 pt-5 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+        数据加载
+      </div>
+
+      <!-- 上传区：知识图谱 CSV -->
+      <div class="px-4 pb-3">
+        <label id="graphDropZone" class="upload-zone flex flex-col items-center justify-center gap-2 p-4 rounded-lg border-2 border-dashed border-slate-600 bg-slate-800/40 cursor-pointer hover:border-brand-400 hover:bg-slate-800/70 transition-all group">
+          <input type="file" accept=".csv" class="hidden" data-type="graph" />
+          <!-- 上传图标 -->
+          <svg class="w-7 h-7 text-slate-400 group-hover:text-brand-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          <span class="text-sm font-medium text-slate-200" id="graphLabel">上传知识图谱 CSV</span>
+          <span class="text-xs text-slate-400 text-center">三元组：head / relation / tail</span>
+          <!-- 状态徽章（默认隐藏） -->
+          <span id="graphBadge" class="hidden text-xs px-2 py-0.5 rounded-full"></span>
+        </label>
+      </div>
+
+      <!-- 上传区：题库 CSV -->
+      <div class="px-4 pb-3">
+        <label id="questionDropZone" class="upload-zone flex flex-col items-center justify-center gap-2 p-4 rounded-lg border-2 border-dashed border-slate-600 bg-slate-800/40 cursor-pointer hover:border-brand-400 hover:bg-slate-800/70 transition-all group">
+          <input type="file" accept=".csv" class="hidden" data-type="question" />
+          <svg class="w-7 h-7 text-slate-400 group-hover:text-brand-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="9" y1="13" x2="15" y2="13" />
+            <line x1="9" y1="17" x2="13" y2="17" />
+          </svg>
+          <span class="text-sm font-medium text-slate-200" id="questionLabel">上传题库 CSV</span>
+          <span class="text-xs text-slate-400 text-center">题目 / 选项 / 答案 / 知识点</span>
+          <span id="questionBadge" class="hidden text-xs px-2 py-0.5 rounded-full"></span>
+        </label>
+      </div>
+
+      <!-- 分区标题：加载统计 -->
+      <div class="px-4 pt-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+        加载统计
+      </div>
+
+      <!-- 统计卡片网格 -->
+      <div class="px-4 pb-4 grid grid-cols-2 gap-2">
+        <div class="bg-slate-800/60 border border-slate-700 rounded-lg p-3">
+          <div class="text-xs text-slate-400">节点数</div>
+          <div id="statNodes" class="text-xl font-bold text-brand-400 stat-num">0</div>
+        </div>
+        <div class="bg-slate-800/60 border border-slate-700 rounded-lg p-3">
+          <div class="text-xs text-slate-400">边数</div>
+          <div id="statEdges" class="text-xl font-bold text-emerald-400 stat-num">0</div>
+        </div>
+        <div class="bg-slate-800/60 border border-slate-700 rounded-lg p-3">
+          <div class="text-xs text-slate-400">题目数</div>
+          <div id="statQuestions" class="text-xl font-bold text-amber-400 stat-num">0</div>
+        </div>
+        <div class="bg-slate-800/60 border border-slate-700 rounded-lg p-3">
+          <div class="text-xs text-slate-400">关系类型</div>
+          <div id="statRelations" class="text-xl font-bold text-purple-400 stat-num">0</div>
+        </div>
+      </div>
+
+      <!-- 分区标题：导航（占位，后续阶段启用） -->
+      <div class="px-4 pt-2 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+        功能导航
+      </div>
+      <nav class="px-4 pb-4 flex flex-col gap-1">
+        <button class="nav-btn text-left px-3 py-2 rounded-md text-sm bg-brand-600/20 text-brand-400 border border-brand-600/30" data-page="home">🏠 首页</button>
+        <button class="nav-btn text-left px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-700/50 transition-colors opacity-50 cursor-not-allowed" data-page="graph" title="第二阶段上线">🕸️ 知识图谱</button>
+        <button class="nav-btn text-left px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-700/50 transition-colors opacity-50 cursor-not-allowed" data-page="learn" title="第三阶段上线">📖 学习中心</button>
+        <button class="nav-btn text-left px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-700/50 transition-colors opacity-50 cursor-not-allowed" data-page="quiz" title="第四阶段上线">✏️ 刷题模式</button>
+      </nav>
+    </aside>
+
+    <!-- ========== 主内容区 ========== -->
+    <main class="flex-1 flex flex-col overflow-hidden relative bg-slate-900">
+
+      <!-- 欢迎卡片（第一阶段占位） -->
+      <div id="welcomeCard" class="absolute inset-0 flex items-center justify-center p-6 z-10">
+        <div class="max-w-lg w-full bg-slate-800/70 border border-slate-700 rounded-2xl p-8 shadow-2xl backdrop-blur-sm">
+          <!-- 大 Logo -->
+          <div class="flex justify-center mb-5">
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-700 flex items-center justify-center shadow-lg">
+              <svg class="w-9 h-9 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                <circle cx="9" cy="8" r="1.4" fill="currentColor" />
+                <circle cx="15" cy="11" r="1.4" fill="currentColor" />
+                <line x1="9.5" y1="9.4" x2="14.5" y2="10" />
+              </svg>
+            </div>
+          </div>
+          <h2 class="text-2xl font-bold text-center text-slate-100 mb-2">欢迎使用 K12 知识图谱学习工具</h2>
+          <p class="text-center text-slate-400 mb-6 text-sm">本地离线 · 隐私安全 · 专注学习</p>
+
+          <!-- 三步引导 -->
+          <div class="space-y-3">
+            <div class="flex items-center gap-3 p-3 rounded-lg bg-slate-700/40 border border-slate-600/50">
+              <span class="flex items-center justify-center w-8 h-8 rounded-full bg-brand-600/30 text-brand-400 font-bold text-sm shrink-0">1</span>
+              <div>
+                <div class="text-sm font-medium text-slate-200">上传知识图谱 CSV</div>
+                <div class="text-xs text-slate-400">三元组格式：head / relation / tail</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 p-3 rounded-lg bg-slate-700/40 border border-slate-600/50">
+              <span class="flex items-center justify-center w-8 h-8 rounded-full bg-brand-600/30 text-brand-400 font-bold text-sm shrink-0">2</span>
+              <div>
+                <div class="text-sm font-medium text-slate-200">上传题库 CSV</div>
+                <div class="text-xs text-slate-400">题目 / 选项 / 答案 / 关联知识点</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 p-3 rounded-lg bg-slate-700/40 border border-slate-600/50">
+              <span class="flex items-center justify-center w-8 h-8 rounded-full bg-brand-600/30 text-brand-400 font-bold text-sm shrink-0">3</span>
+              <div>
+                <div class="text-sm font-medium text-slate-200">开启学习之旅</div>
+                <div class="text-xs text-slate-400">知识图谱 · 学习路径 · 刷题巩固</div>
+              </div>
+            </div>
+          </div>
+
+          <p class="text-center text-xs text-slate-500 mt-6">↑ 请在左侧边栏上传数据文件开始使用</p>
+        </div>
+      </div>
+
+      <!-- Cytoscape 容器（第二阶段启用，第一阶段隐藏） -->
+      <div id="cy" class="hidden"></div>
+    </main>
+  </div>
+
+  <!-- ==================== 底部状态栏 ==================== -->
+  <footer class="h-8 flex items-center justify-between px-4 bg-slate-800/70 border-t border-slate-700 text-xs text-slate-400 shrink-0">
+    <span id="statusText">就绪 · 请上传数据文件</span>
+    <div class="flex items-center gap-4">
+      <span>节点 <b id="footNodes" class="text-brand-400 stat-num">0</b></span>
+      <span class="text-slate-600">|</span>
+      <span>边 <b id="footEdges" class="text-emerald-400 stat-num">0</b></span>
+      <span class="text-slate-600">|</span>
+      <span>题目 <b id="footQuestions" class="text-amber-400 stat-num">0</b></span>
+      <span class="text-slate-600">|</span>
+      <span class="text-slate-500">v0.1.0 · Phase 1</span>
+    </div>
+  </footer>
+
+  <!-- ===== 4. 数据仓库 + 常量 ===== -->
+  <script>
+    /**
+     * 全局数据仓库 —— 跨函数/跨阶段共享的唯一数据源
+     * nodes   : Map<id, { id, label, mastered, refs:Set }>
+     * edges   : [{ id, source, target, relation }]
+     * relations : Set<string>  所有出现过的关系类型
+     * questions : [{ id, question, options:[A,B,C,D], answer, kp }]
+     * stats   : { nodeCount, edgeCount, questionCount, relationTypes }
+     */
+    const AppData = {
+      nodes: new Map(),
+      edges: [],
+      relations: new Set(),
+      questions: [],
+      stats: { nodeCount: 0, edgeCount: 0, questionCount: 0, relationTypes: 0 }
+    };
+
+    // localStorage 键名常量
+    const STORAGE_KEYS = {
+      nodes: 'kgraph.nodes',
+      edges: 'kgraph.edges',
+      relations: 'kgraph.relations',
+      questions: 'kgraph.questions'
+    };
+
+    // 版本信息
+    const APP_VERSION = 'v0.1.0 · Phase 1';
+  </script>
+
+  <!-- ===== 5. CSV 解析函数 ===== -->
+  <script>
+    /**
+     * 解析知识图谱 CSV（三元组 head/relation/tail）
+     * @param {string} text - CSV 文件全文
+     * @returns {{ nodes:Array, edges:Array, relations:Array }} 解析结果
+     * @throws {Error} 列数不足或内容为空时抛出友好错误
+     */
+    function parseGraphCSV(text) {
+      // 空文件校验
+      if (!text || !text.trim()) {
+        throw new Error('文件内容为空');
+      }
+
+      // Papaparse 启用表头模式解析
+      const result = Papa.parse(text, {
+        header: true,         // 首行作为字段名
+        skipEmptyLines: true, // 跳过空行
+        transformHeader: h => h.trim().toLowerCase() // 表头统一小写去空格
+      });
+
+      // 解析过程错误（如引号不匹配）
+      if (result.errors && result.errors.length > 0) {
+        const msg = result.errors[0].message || 'CSV 格式异常';
+        throw new Error('CSV 解析失败：' + msg);
+      }
+
+      const rows = result.data;
+      if (!rows || rows.length === 0) {
+        throw new Error('未解析到有效数据行');
+      }
+
+      // 列名校验：至少包含 head/relation/tail 三列（兼容中文表头）
+      const fields = result.meta.fields || [];
+      const hasHead = fields.some(f => ['head', '头节点', 'source', '实体1', '主体'].includes(f));
+      const hasRelation = fields.some(f => ['relation', '关系', 'rel', '联系'].includes(f));
+      const hasTail = fields.some(f => ['tail', '尾节点', 'target', '实体2', '客体'].includes(f));
+
+      // 若表头无法识别，但列数 >= 3，则按位置推断（第1列=head, 第2列=relation, 第3列=tail）
+      const byPosition = !hasHead && !hasRelation && !hasTail && fields.length >= 3;
+
+      if (!hasHead && !hasRelation && !hasTail && !byPosition) {
+        throw new Error('CSV 列数不足：需要至少 3 列（head / relation / tail）');
+      }
+
+      // 建立字段映射（优先按名称，否则按位置）
+      const colHead = byPosition ? fields[0] : fields.find(f => ['head', '头节点', 'source', '实体1', '主体'].includes(f));
+      const colRel  = byPosition ? fields[1] : fields.find(f => ['relation', '关系', 'rel', '联系'].includes(f));
+      const colTail = byPosition ? fields[2] : fields.find(f => ['tail', '尾节点', 'target', '实体2', '客体'].includes(f));
+
+      // 逐行解析，构建节点与边
+      const nodeMap = new Map();
+      const edges = [];
+      const relations = new Set();
+      let edgeId = 0;
+
+      for (const row of rows) {
+        const head = (row[colHead] || '').trim();
+        const relation = (row[colRel] || '').trim();
+        const tail = (row[colTail] || '').trim();
+
+        // 跳过不完整行
+        if (!head || !tail || !relation) continue;
+
+        // 节点去重（同名合并）
+        if (!nodeMap.has(head)) {
+          nodeMap.set(head, { id: head, label: head, mastered: 'none', refs: new Set() });
+        }
+        if (!nodeMap.has(tail)) {
+          nodeMap.set(tail, { id: tail, label: tail, mastered: 'none', refs: new Set() });
+        }
+
+        // 收集关系类型
+        relations.add(relation);
+
+        // 构建边
+        const edge = {
+          id: 'e' + (edgeId++),
+          source: head,
+          target: tail,
+          relation: relation
+        };
+        edges.push(edge);
+
+        // 记录节点被引用的边（便于后续高亮关联）
+        nodeMap.get(head).refs.add(edge.id);
+        nodeMap.get(tail).refs.add(edge.id);
+      }
+
+      if (edges.length === 0) {
+        throw new Error('未解析到有效三元组，请检查 CSV 内容');
+      }
+
+      return {
+        nodes: Array.from(nodeMap.values()),
+        edges: edges,
+        relations: Array.from(relations)
+      };
+    }
+
+    /**
+     * 解析题库 CSV
+     * 期望字段：question, optionA, optionB, optionC, optionD, answer, [knowledge_point]
+     * @param {string} text - CSV 文件全文
+     * @returns {Array<{id, question, options, answer, kp}>} 标准化题目数组
+     * @throws {Error} 列数不足或内容为空时抛出友好错误
+     */
+    function parseQuestionCSV(text) {
+      if (!text || !text.trim()) {
+        throw new Error('文件内容为空');
+      }
+
+      const result = Papa.parse(text, {
+        header: true,
+        skipEmptyLines: true,
+        transformHeader: h => h.trim().toLowerCase()
+      });
+
+      if (result.errors && result.errors.length > 0) {
+        const msg = result.errors[0].message || 'CSV 格式异常';
+        throw new Error('CSV 解析失败：' + msg);
+      }
+
+      const rows = result.data;
+      if (!rows || rows.length === 0) {
+        throw new Error('未解析到有效数据行');
+      }
+
+      const fields = result.meta.fields || [];
+
+      // 字段名映射（兼容中英文）
+      const findCol = (names) => fields.find(f => names.includes(f));
+
+      const colQ   = findCol(['question', '题目', '题干', 'question_content']);
+      const colA   = findCol(['optiona', 'option_a', 'a', '选项a', '选项A']);
+      const colB   = findCol(['optionb', 'option_b', 'b', '选项b', '选项B']);
+      const colC   = findCol(['optionc', 'option_c', 'c', '选项c', '选项C']);
+      const colD   = findCol(['optiond', 'option_d', 'd', '选项d', '选项D']);
+      const colAns = findCol(['answer', '答案', 'correct', 'correct_answer']);
+      const colKP  = findCol(['knowledge_point', 'knowledgepoint', 'kp', '知识点', '关联知识点', 'node']);
+
+      // 必须字段：题目 + 至少 A/B/C 三个选项 + 答案
+      if (!colQ || !colA || !colB || !colC || !colAns) {
+        throw new Error('题库 CSV 列数不足：至少需要 题目/选项A/选项B/选项C/答案 共 5 列');
+      }
+
+      const questions = [];
+      let qid = 0;
+
+      for (const row of rows) {
+        const q = (row[colQ] || '').trim();
+        const a = (row[colA] || '').trim();
+        const b = (row[colB] || '').trim();
+        const c = (row[colC] || '').trim();
+        const d = colD ? (row[colD] || '').trim() : '';
+        const ans = (row[colAns] || '').trim().toUpperCase();
+        const kp = colKP ? (row[colKP] || '').trim() : '';
+
+        // 跳过不完整行
+        if (!q || !a || !b || !c || !ans) continue;
+
+        // 答案校验（仅接受 A/B/C/D）
+        if (!['A', 'B', 'C', 'D'].includes(ans)) {
+          console.warn('跳过答案无效的题目：' + q.slice(0, 30) + '...');
+          continue;
+        }
+
+        questions.push({
+          id: 'q' + (qid++),
+          question: q,
+          options: { A: a, B: b, C: c, D: d },
+          answer: ans,
+          kp: kp   // 关联知识点（可选，用于后续跳转）
+        });
+      }
+
+      if (questions.length === 0) {
+        throw new Error('未解析到有效题目，请检查 CSV 内容');
+      }
+
+      return questions;
+    }
+  </script>
+
+  <!-- ===== 6. UI 渲染函数 ===== -->
+  <script>
+    /**
+     * 更新侧边栏 + 底部状态栏的统计数字
+     */
+    function updateStats() {
+      const s = AppData.stats;
+      // 侧边栏统计卡片
+      document.getElementById('statNodes').textContent = s.nodeCount;
+      document.getElementById('statEdges').textContent = s.edgeCount;
+      document.getElementById('statQuestions').textContent = s.questionCount;
+      document.getElementById('statRelations').textContent = s.relationTypes;
+      // 底部状态栏
+      document.getElementById('footNodes').textContent = s.nodeCount;
+      document.getElementById('footEdges').textContent = s.edgeCount;
+      document.getElementById('footQuestions').textContent = s.questionCount;
+    }
+
+    /**
+     * 更新底部状态栏文本
+     * @param {string} text - 状态描述
+     * @param {'info'|'success'|'error'} type - 状态类型（控制颜色）
+     */
+    function setStatus(text, type = 'info') {
+      const el = document.getElementById('statusText');
+      el.textContent = text;
+      // 根据类型切换颜色
+      el.className = {
+        info: 'text-slate-400',
+        success: 'text-emerald-400',
+        error: 'text-rose-400'
+      }[type] || 'text-slate-400';
+    }
+
+    /**
+     * 设置上传区的状态徽章
+     * @param {'graph'|'question'} type - 上传区类型
+     * @param {'loading'|'success'|'error'} state - 状态
+     * @param {string} message - 显示文案
+     */
+    function setUploadBadge(type, state, message) {
+      const badge = document.getElementById(type + 'Badge');
+      const label = document.getElementById(type + 'Label');
+      badge.classList.remove('hidden', 'bg-emerald-500/20', 'text-emerald-400', 'bg-rose-500/20', 'text-rose-400', 'bg-brand-500/20', 'text-brand-400');
+
+      if (state === 'loading') {
+        badge.textContent = '⏳ ' + message;
+        badge.classList.add('bg-brand-500/20', 'text-brand-400');
+      } else if (state === 'success') {
+        badge.textContent = '✓ ' + message;
+        badge.classList.add('bg-emerald-500/20', 'text-emerald-400');
+      } else if (state === 'error') {
+        badge.textContent = '✗ ' + message;
+        badge.classList.add('bg-rose-500/20', 'text-rose-400');
+      }
+      badge.classList.remove('hidden');
+    }
+
+    /**
+     * 隐藏上传区徽章
+     * @param {'graph'|'question'} type
+     */
+    function clearUploadBadge(type) {
+      document.getElementById(type + 'Badge').classList.add('hidden');
+    }
+
+    /**
+     * 将数据持久化到 localStorage
+     */
+    function persistToStorage() {
+      try {
+        // Map → 普通数组序列化
+        localStorage.setItem(STORAGE_KEYS.nodes, JSON.stringify(AppData.nodes.map(n => ({
+          ...n, refs: Array.from(n.refs)
+        }))));
+        localStorage.setItem(STORAGE_KEYS.edges, JSON.stringify(AppData.edges));
+        localStorage.setItem(STORAGE_KEYS.relations, JSON.stringify(Array.from(AppData.relations)));
+        localStorage.setItem(STORAGE_KEYS.questions, JSON.stringify(AppData.questions));
+      } catch (e) {
+        console.warn('localStorage 写入失败（可能是隐私模式或存储已满）：', e);
+      }
+    }
+  </script>
+
+  <!-- ===== 7. 事件绑定 ===== -->
+  <script>
+    /**
+     * 处理知识图谱 CSV 文件上传
+     * @param {File} file
+     */
+    async function handleGraphFile(file) {
+      setUploadBadge('graph', 'loading', '解析中…');
+      setStatus('正在解析知识图谱 CSV…', 'info');
+
+      try {
+        // 读取文件文本
+        const text = await file.text();
+        // 解析
+        const { nodes, edges, relations } = parseGraphCSV(text);
+
+        // 写入全局仓库
+        AppData.nodes.clear();
+        nodes.forEach(n => AppData.nodes.set(n.id, n));
+        AppData.edges = edges;
+        AppData.relations = new Set(relations);
+        AppData.stats = {
+          nodeCount: nodes.length,
+          edgeCount: edges.length,
+          questionCount: AppData.stats.questionCount,
+          relationTypes: relations.length
+        };
+
+        // 持久化
+        persistToStorage();
+
+        // 控制台输出（便于调试）
+        console.log('[知识图谱] 解析完成 ✓');
+        console.log('  节点数：', nodes.length);
+        console.log('  边数：', edges.length);
+        console.log('  关系类型：', relations);
+        console.log('  节点数组：', nodes);
+        console.log('  边数组：', edges);
+
+        // UI 更新
+        updateStats();
+        setUploadBadge('graph', 'success', file.name);
+        setStatus('知识图谱加载成功：' + nodes.length + ' 节点 / ' + edges.length + ' 边', 'success');
+      } catch (err) {
+        console.warn('[知识图谱] 解析失败：', err.message);
+        setUploadBadge('graph', 'error', err.message);
+        setStatus('知识图谱加载失败：' + err.message, 'error');
+      }
+    }
+
+    /**
+     * 处理题库 CSV 文件上传
+     * @param {File} file
+     */
+    async function handleQuestionFile(file) {
+      setUploadBadge('question', 'loading', '解析中…');
+      setStatus('正在解析题库 CSV…', 'info');
+
+      try {
+        const text = await file.text();
+        const questions = parseQuestionCSV(text);
+
+        // 写入全局仓库
+        AppData.questions = questions;
+        AppData.stats.questionCount = questions.length;
+
+        // 持久化
+        persistToStorage();
+
+        // 控制台输出
+        console.log('[题库] 解析完成 ✓');
+        console.log('  题目数：', questions.length);
+        console.log('  题目数组：', questions);
+
+        // UI 更新
+        updateStats();
+        setUploadBadge('question', 'success', file.name);
+        setStatus('题库加载成功：' + questions.length + ' 道题目', 'success');
+      } catch (err) {
+        console.warn('[题库] 解析失败：', err.message);
+        setUploadBadge('question', 'error', err.message);
+        setStatus('题库加载失败：' + err.message, 'error');
+      }
+    }
+
+    /**
+     * 为单个上传区绑定事件（点击 + 拖拽）
+     * @param {string} dropZoneId - 拖拽区域元素 ID
+     * @param {'graph'|'question'} type - 上传类型
+     */
+    function bindUploadZone(dropZoneId, type) {
+      const zone = document.getElementById(dropZoneId);
+      const input = zone.querySelector('input[type="file"]');
+
+      // 点击上传
+      input.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (type === 'graph') handleGraphFile(file);
+        else handleQuestionFile(file);
+        // 清空 input，允许重复上传同一文件
+        input.value = '';
+      });
+
+      // 拖拽事件
+      ['dragenter', 'dragover'].forEach(evt => {
+        zone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          zone.classList.add('drag-active');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach(evt => {
+        zone.addEventListener(evt, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          zone.classList.remove('drag-active');
+        });
+      });
+
+      zone.addEventListener('drop', (e) => {
+        const file = e.dataTransfer.files[0];
+        if (!file) return;
+        if (type === 'graph') handleGraphFile(file);
+        else handleQuestionFile(file);
+      });
+    }
+  </script>
+
+  <!-- ===== 8. 初始化入口 ===== -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // 绑定两个上传区
+      bindUploadZone('graphDropZone', 'graph');
+      bindUploadZone('questionDropZone', 'question');
+
+      // 导航按钮点击（仅首页可点，其余为占位）
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const page = btn.dataset.page;
+          if (page === 'home') {
+            // 切换回欢迎卡片
+            document.getElementById('welcomeCard').classList.remove('hidden');
+            document.getElementById('cy').classList.add('hidden');
+            setStatus('就绪 · 首页', 'info');
+          } else {
+            // 未上线功能提示
+            setStatus('该功能将在后续阶段上线：' + btn.textContent.trim(), 'info');
+          }
+        });
+      });
+
+      // 主题切换按钮（占位提示）
+      document.getElementById('themeToggle').addEventListener('click', () => {
+        setStatus('主题切换功能将在后续阶段上线', 'info');
+      });
+
+      // 初始化统计显示
+      updateStats();
+
+      // 控制台欢迎信息
+      console.log('%c[K12 知识图谱学习工具] ' + APP_VERSION + ' 已启动',
+        'color: #38bdf8; font-weight: bold;');
+      console.log('请在左侧上传知识图谱 CSV 与题库 CSV 开始使用。');
+    });
+  </script>
+</body>
+</html>

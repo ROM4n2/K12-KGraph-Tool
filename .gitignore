@@ -1,0 +1,27 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 原始大数据文件（核心 CSV 已纳入，其他格式备份按需手动添加） =====
+data/*.json
+data/*.jsonl
+data/.gitkeep
+
+# 但保留已转换的核心 CSV
+!data/k12-kgraph.csv
+!data/k12-bench.csv
