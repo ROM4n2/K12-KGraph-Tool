@@ -228,6 +228,49 @@
         </div>
       </div>
 
+      <!-- 图谱工具栏（Task 5） -->
+      <div id="graphToolbar" class="absolute top-4 left-4 z-20 flex items-center gap-1 bg-slate-800/80 border border-slate-700 rounded-lg px-2 py-1.5 backdrop-blur-sm">
+        <span class="text-xs text-slate-400 px-1">布局：</span>
+        <button data-layout="grid" class="layout-btn px-2 py-1 text-xs rounded bg-brand-600/30 text-brand-400 border border-brand-600/40">网格</button>
+        <button data-layout="cose" class="layout-btn px-2 py-1 text-xs rounded text-slate-300 hover:bg-slate-700/50">力导向</button>
+        <button data-layout="circle" class="layout-btn px-2 py-1 text-xs rounded text-slate-300 hover:bg-slate-700/50">圆形</button>
+        <button data-layout="concentric" class="layout-btn px-2 py-1 text-xs rounded text-slate-300 hover:bg-slate-700/50">同心圆</button>
+        <span class="w-px h-4 bg-slate-600 mx-1"></span>
+        <button id="fitBtn" class="px-2 py-1 text-xs rounded text-slate-300 hover:bg-slate-700/50" title="适应画布">⊡ 适应</button>
+      </div>
+
+      <!-- 关系图例（Task 6） -->
+      <div id="legendPanel" class="absolute bottom-4 left-4 z-20 bg-slate-800/80 border border-slate-700 rounded-lg px-3 py-2 backdrop-blur-sm">
+        <div class="text-xs text-slate-400 mb-1">关系类型</div>
+        <div id="legendItems" class="flex flex-wrap gap-x-3 gap-y-1 max-w-md"></div>
+      </div>
+
+      <!-- 节点详情面板（Task 4） -->
+      <div id="nodePanel" class="absolute top-4 right-4 w-72 bg-slate-800/90 border border-slate-700 rounded-xl p-4 shadow-2xl backdrop-blur-sm hidden z-20">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-sm font-semibold text-brand-400">节点详情</h3>
+          <button id="closeNodePanel" class="text-slate-400 hover:text-slate-200 text-lg leading-none">&times;</button>
+        </div>
+        <div class="space-y-2 text-sm">
+          <div><span class="text-slate-400">名称：</span><span id="npName" class="text-slate-100 font-medium"></span></div>
+          <div><span class="text-slate-400">ID：</span><span id="npId" class="text-slate-300 text-xs font-mono"></span></div>
+          <div><span class="text-slate-400">关联边：</span><span id="npEdgeCount" class="text-emerald-400"></span></div>
+          <div>
+            <span class="text-slate-400">关系分布：</span>
+            <div id="npRelations" class="mt-1 flex flex-wrap gap-1"></div>
+          </div>
+          <div class="pt-2 border-t border-slate-700">
+            <span class="text-slate-400">掌握度：</span>
+            <select id="npMastered" class="ml-2 bg-slate-700 text-slate-200 text-xs rounded px-2 py-1 border border-slate-600">
+              <option value="none">未学</option>
+              <option value="learning">已学</option>
+              <option value="weak">薄弱</option>
+              <option value="mastered">已掌握</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <!-- Cytoscape 容器（第二阶段启用，初始隐藏，有数据后显示） -->
       <div id="cy" class="hidden flex-1"></div>
     </main>
@@ -275,7 +318,7 @@
     };
 
     // 版本信息
-    const APP_VERSION = 'v0.1.0 · Phase 1';
+    const APP_VERSION = 'v0.2.0 · Phase 2';
   </script>
 
   <!-- ===== 9. Cytoscape 图谱引擎 ===== -->
@@ -369,6 +412,195 @@
         motionBlur: false,
       });
       return AppData.cy;
+    }
+
+    /**
+     * 9.4 渲染图谱 —— 将 AppData 注入 Cytoscape 并布局
+     */
+    function renderGraph() {
+      if (!AppData.cy) initCytoscape();
+      const cy = AppData.cy;
+      const colorMap = buildRelationColorMap();
+
+      // 有数据 → 隐藏欢迎卡片，显示图谱
+      document.getElementById('welcomeCard').classList.add('hidden');
+      const cyDiv = document.getElementById('cy');
+      cyDiv.classList.remove('hidden');
+      cyDiv.classList.add('flex-1');
+
+      // 清空旧数据
+      cy.elements().remove();
+
+      // 注入节点
+      const nodeEls = [];
+      for (const [id, node] of AppData.nodes) {
+        nodeEls.push({ data: { id: id, label: node.label || id } });
+      }
+      cy.add(nodeEls);
+
+      // 注入边（按关系着色）
+      const edgeEls = [];
+      for (const edge of AppData.edges) {
+        edgeEls.push({
+          data: {
+            id: edge.id,
+            source: edge.source,
+            target: edge.target,
+            relation: edge.relation,
+            lineColor: colorMap[edge.relation] || '#94a3b8',
+          }
+        });
+      }
+      cy.add(edgeEls);
+
+      // 应用边的动态颜色
+      cy.style().selector('edge').style({
+        'line-color': 'data(lineColor)',
+        'target-arrow-color': 'data(lineColor)',
+      }).update();
+
+      // 初始布局（grid 最快，适合大数据集首次渲染）
+      cy.layout({ name: 'grid', padding: 10, fit: true }).run();
+      cy.fit(null, 30);
+
+      // 渲染图例
+      renderLegend();
+
+      console.log(`[Cytoscape] 渲染完成：${nodeEls.length} 节点 / ${edgeEls.length} 边`);
+    }
+
+    /**
+     * 9.5 切换布局
+     */
+    function runLayout(name) {
+      if (!AppData.cy) return;
+      const cy = AppData.cy;
+      const configs = {
+        grid:       { name: 'grid',       padding: 10, fit: true },
+        cose:       { name: 'cose',       padding: 30, fit: true, animate: true, animationDuration: 800,
+                      randomize: false, componentSpacing: 80, nodeRepulsion: 800000 },
+        circle:     { name: 'circle',     padding: 30, fit: true, animate: true, animationDuration: 500 },
+        concentric: { name: 'concentric', padding: 30, fit: true, animate: true, animationDuration: 500,
+                      concentric: (ele) => ele.degree(), levelWidth: () => 2 },
+      };
+      const cfg = configs[name] || configs.grid;
+      cy.layout(cfg).run();
+
+      // 更新按钮高亮
+      document.querySelectorAll('.layout-btn').forEach(btn => {
+        btn.className = 'layout-btn px-2 py-1 text-xs rounded ' +
+          (btn.dataset.layout === name
+            ? 'bg-brand-600/30 text-brand-400 border border-brand-600/40'
+            : 'text-slate-300 hover:bg-slate-700/50');
+      });
+    }
+
+    /**
+     * 9.6 绑定节点点击事件 → 详情面板
+     */
+    function bindNodeEvents() {
+      const cy = AppData.cy;
+      const panel = document.getElementById('nodePanel');
+
+      // 点击节点 → 显示详情
+      cy.on('tap', 'node', (evt) => {
+        const node = evt.target;
+        const nodeId = node.id();
+        const nodeData = AppData.nodes.get(nodeId);
+
+        // 高亮当前节点及其邻居
+        cy.elements().removeClass('highlight');
+        node.addClass('highlight');
+        node.neighborhood('node').addClass('highlight');
+
+        // 统计关联边
+        const connectedEdges = node.connectedEdges();
+        const relCount = {};
+        connectedEdges.forEach(e => {
+          const rel = e.data('relation');
+          relCount[rel] = (relCount[rel] || 0) + 1;
+        });
+
+        // 填充面板
+        document.getElementById('npName').textContent = nodeData ? nodeData.label : nodeId;
+        document.getElementById('npId').textContent = nodeId;
+        document.getElementById('npEdgeCount').textContent = connectedEdges.length;
+
+        // 关系分布徽章
+        const relContainer = document.getElementById('npRelations');
+        const colorMap = buildRelationColorMap();
+        relContainer.innerHTML = '';
+        for (const [rel, count] of Object.entries(relCount)) {
+          const badge = document.createElement('span');
+          badge.className = 'text-xs px-1.5 py-0.5 rounded';
+          badge.style.backgroundColor = (colorMap[rel] || '#94a3b8') + '30';
+          badge.style.color = colorMap[rel] || '#94a3b8';
+          badge.textContent = `${rel}(${count})`;
+          relContainer.appendChild(badge);
+        }
+
+        // 掌握度
+        document.getElementById('npMastered').value = nodeData ? nodeData.mastered : 'none';
+
+        // 显示面板
+        panel.classList.remove('hidden');
+      });
+
+      // 点击空白 → 隐藏面板
+      cy.on('tap', (evt) => {
+        if (evt.target === cy) {
+          panel.classList.add('hidden');
+          cy.elements().removeClass('highlight');
+        }
+      });
+
+      // 关闭按钮
+      document.getElementById('closeNodePanel').addEventListener('click', () => {
+        panel.classList.add('hidden');
+        cy.elements().removeClass('highlight');
+      });
+
+      // 掌握度变更 → 写入 AppData
+      document.getElementById('npMastered').addEventListener('change', (e) => {
+        const nodeId = document.getElementById('npId').textContent;
+        const nodeData = AppData.nodes.get(nodeId);
+        if (nodeData) {
+          nodeData.mastered = e.target.value;
+          persistToStorage();
+        }
+      });
+    }
+
+    /**
+     * 9.7 渲染关系图例
+     */
+    function renderLegend() {
+      const container = document.getElementById('legendItems');
+      if (!container) return;
+      const colorMap = buildRelationColorMap();
+      container.innerHTML = '';
+      for (const rel of AppData.relations) {
+        const item = document.createElement('span');
+        item.className = 'text-xs flex items-center gap-1';
+        item.innerHTML = `<span class="inline-block w-3 h-1.5 rounded" style="background:${colorMap[rel] || '#94a3b8'}"></span><span class="text-slate-300">${rel}</span>`;
+        container.appendChild(item);
+      }
+    }
+
+    /**
+     * 9.8 检查欢迎卡片可见性
+     */
+    function checkWelcomeVisibility() {
+      const welcome = document.getElementById('welcomeCard');
+      const cyDiv = document.getElementById('cy');
+      if (AppData.nodes.size > 0) {
+        welcome.classList.add('hidden');
+        cyDiv.classList.remove('hidden');
+        cyDiv.classList.add('flex-1');
+      } else {
+        welcome.classList.remove('hidden');
+        cyDiv.classList.add('hidden');
+      }
     }
   </script>
 
@@ -681,6 +913,7 @@
 
         // UI 更新
         updateStats();
+        renderGraph();                       // Phase 2：渲染图谱
         setUploadBadge('graph', 'success', file.name);
         setStatus('知识图谱加载成功：' + nodes.length + ' 节点 / ' + edges.length + ' 边', 'success');
       } catch (err) {
@@ -777,14 +1010,24 @@
       bindUploadZone('graphDropZone', 'graph');
       bindUploadZone('questionDropZone', 'question');
 
+      // Phase 2：初始化 Cytoscape 实例 + 节点点击事件
+      initCytoscape();
+      bindNodeEvents();
+
+      // Phase 2：布局切换按钮
+      document.querySelectorAll('.layout-btn').forEach(btn => {
+        btn.addEventListener('click', () => runLayout(btn.dataset.layout));
+      });
+      document.getElementById('fitBtn').addEventListener('click', () => {
+        if (AppData.cy) AppData.cy.fit(null, 30);
+      });
+
       // 导航按钮点击（仅首页可点，其余为占位）
       document.querySelectorAll('.nav-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           const page = btn.dataset.page;
           if (page === 'home') {
-            // 切换回欢迎卡片
-            document.getElementById('welcomeCard').classList.remove('hidden');
-            document.getElementById('cy').classList.add('hidden');
+            checkWelcomeVisibility();
             setStatus('就绪 · 首页', 'info');
           } else {
             // 未上线功能提示
@@ -800,6 +1043,9 @@
 
       // 初始化统计显示
       updateStats();
+
+      // Phase 2：根据数据显示欢迎卡片或图谱
+      checkWelcomeVisibility();
 
       // 控制台欢迎信息
       console.log('%c[K12 知识图谱学习工具] ' + APP_VERSION + ' 已启动',
