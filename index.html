@@ -166,6 +166,41 @@
         </div>
       </div>
 
+      <!-- Phase 3：掌握度分布 -->
+      <div class="px-4 pt-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+        掌握度分布
+      </div>
+      <div class="px-4 pb-4 space-y-1.5">
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-500"></span>未学</span>
+          <div class="flex-1 mx-2 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+            <div id="masteredBarNone" class="h-full bg-slate-500 rounded-full transition-all" style="width:100%"></div>
+          </div>
+          <span id="masteredCountNone" class="text-slate-400 stat-num w-10 text-right">0</span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span>已学</span>
+          <div class="flex-1 mx-2 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+            <div id="masteredBarLearning" class="h-full bg-blue-500 rounded-full transition-all" style="width:0%"></div>
+          </div>
+          <span id="masteredCountLearning" class="text-blue-400 stat-num w-10 text-right">0</span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span>薄弱</span>
+          <div class="flex-1 mx-2 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+            <div id="masteredBarWeak" class="h-full bg-amber-500 rounded-full transition-all" style="width:0%"></div>
+          </div>
+          <span id="masteredCountWeak" class="text-amber-400 stat-num w-10 text-right">0</span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>已掌握</span>
+          <div class="flex-1 mx-2 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+            <div id="masteredBarMastered" class="h-full bg-emerald-500 rounded-full transition-all" style="width:0%"></div>
+          </div>
+          <span id="masteredCountMastered" class="text-emerald-400 stat-num w-10 text-right">0</span>
+        </div>
+      </div>
+
       <!-- 分区标题：导航（占位，后续阶段启用） -->
       <div class="px-4 pt-2 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
         功能导航
@@ -228,7 +263,7 @@
         </div>
       </div>
 
-      <!-- 图谱工具栏（Task 5） -->
+      <!-- 图谱工具栏（Phase 2 + Phase 3 搜索） -->
       <div id="graphToolbar" class="absolute top-4 left-4 z-20 flex items-center gap-1 bg-slate-800/80 border border-slate-700 rounded-lg px-2 py-1.5 backdrop-blur-sm">
         <span class="text-xs text-slate-400 px-1">布局：</span>
         <button data-layout="grid" class="layout-btn px-2 py-1 text-xs rounded bg-brand-600/30 text-brand-400 border border-brand-600/40">网格</button>
@@ -237,6 +272,17 @@
         <button data-layout="concentric" class="layout-btn px-2 py-1 text-xs rounded text-slate-300 hover:bg-slate-700/50">同心圆</button>
         <span class="w-px h-4 bg-slate-600 mx-1"></span>
         <button id="fitBtn" class="px-2 py-1 text-xs rounded text-slate-300 hover:bg-slate-700/50" title="适应画布">⊡ 适应</button>
+      </div>
+
+      <!-- Phase 3：搜索框 + 前置路径按钮 -->
+      <div class="absolute top-4 left-72 z-20 flex items-center gap-1.5 bg-slate-800/80 border border-slate-700 rounded-lg px-2 py-1.5 backdrop-blur-sm">
+        <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="searchInput" type="text" placeholder="搜索知识点..."
+          class="bg-transparent text-xs text-slate-200 placeholder-slate-500 outline-none w-32">
+        <span id="searchCount" class="text-xs text-slate-500 hidden"></span>
+        <button id="searchClear" class="text-slate-500 hover:text-slate-300 text-xs hidden">&times;</button>
+        <span class="w-px h-4 bg-slate-600 mx-0.5"></span>
+        <button id="prereqBtn" class="px-2 py-1 text-xs rounded text-slate-300 hover:bg-slate-700/50" title="显示当前节点的前置知识链">⤴ 前置路径</button>
       </div>
 
       <!-- 关系图例（Task 6） -->
@@ -356,6 +402,19 @@
         { selector: 'node.highlight', style: {
           'border-width': 3, 'border-color': '#fbbf24',
           'background-color': '#fbbf24',
+        }},
+        // Phase 3：搜索命中高亮（脉冲黄边 + 放大）
+        { selector: 'node.search-hit', style: {
+          'border-width': 3, 'border-color': '#facc15',
+          'background-color': '#facc15',
+          'width': 22, 'height': 22',
+          'z-index': 999,
+        }},
+        // Phase 3：前置路径高亮（琥珀色边）
+        { selector: 'edge.prereq-path', style: {
+          'width': 3, 'line-color': '#f59e0b',
+          'target-arrow-color': '#f59e0b',
+          'opacity': 1, 'z-index': 999,
         }},
       ];
     }
@@ -560,13 +619,14 @@
         cy.elements().removeClass('highlight');
       });
 
-      // 掌握度变更 → 写入 AppData
+      // 掌握度变更 → 写入 AppData + 更新统计
       document.getElementById('npMastered').addEventListener('change', (e) => {
         const nodeId = document.getElementById('npId').textContent;
         const nodeData = AppData.nodes.get(nodeId);
         if (nodeData) {
           nodeData.mastered = e.target.value;
           persistToStorage();
+          updateMasteryStats();
         }
       });
     }
@@ -601,6 +661,149 @@
         welcome.classList.remove('hidden');
         cyDiv.classList.add('hidden');
       }
+    }
+
+    /**
+     * Phase 3 - 搜索知识点高亮
+     * 根据输入关键词模糊匹配节点名称，高亮匹配项并居中位
+     */
+    function searchNodes(keyword) {
+      if (!AppData.cy) return [];
+      const cy = AppData.cy;
+      const kw = keyword.trim().toLowerCase();
+      if (!kw) {
+        cy.elements().removeClass('search-hit');
+        document.getElementById('searchCount').classList.add('hidden');
+        return [];
+      }
+      const matches = cy.nodes().filter(n => {
+        const nodeId = n.id().toLowerCase();
+        const nodeData = AppData.nodes.get(n.id());
+        const label = (nodeData ? nodeData.label : nodeId).toLowerCase();
+        return label.includes(kw) || nodeId.includes(kw);
+      });
+      cy.elements().removeClass('search-hit');
+      matches.addClass('search-hit');
+      document.getElementById('searchCount').textContent = matches.length;
+      document.getElementById('searchCount').classList.remove('hidden');
+      // 居中到第一个匹配
+      if (matches.length > 0) {
+        cy.animate({ center: { eles: matches.first() }, zoom: Math.max(cy.zoom(), 1) }, { duration: 300 });
+      }
+      return matches;
+    }
+
+    /**
+     * Phase 3 - 前置知识路径分析
+     * 从当前节点出发，沿 prerequisites_for 边反向追溯所有前置知识
+     * 在图谱中高亮整条路径
+     */
+    function tracePrereqs() {
+      if (!AppData.cy) return;
+      const cy = AppData.cy;
+      const selected = cy.$('node:selected');
+      let startNode = selected.length > 0 ? selected.first() : null;
+      // 若无选中，取详情面板显示的节点
+      if (!startNode) {
+        const npId = document.getElementById('npId').textContent;
+        if (npId) startNode = cy.getElementById(npId);
+      }
+      if (!startNode) {
+        setStatus('请先选中一个节点，再点击"前置路径"', 'info');
+        return;
+      }
+
+      // BFS 反向追溯 prerequisites_for
+      const visited = new Set();
+      const pathEdges = [];
+      const queue = [startNode.id()];
+      visited.add(startNode.id());
+
+      while (queue.length > 0) {
+        const cur = queue.shift();
+        const node = cy.getElementById(cur);
+        // 找指向当前节点的 prerequisites_for 边（cur 是 target）
+        const incoming = node.incomers('edge[relation="prerequisites_for"]');
+        incoming.forEach(e => {
+          const src = e.source();
+          if (!visited.has(src.id())) {
+            visited.add(src.id());
+            queue.push(src.id());
+            pathEdges.push(e.id());
+          }
+        });
+      }
+
+      // 高亮路径
+      cy.elements().removeClass('search-hit').removeClass('highlight');
+      visited.forEach(nid => cy.getElementById(nid).addClass('search-hit'));
+      pathEdges.forEach(eid => cy.getElementById(eid).addClass('prereq-path'));
+
+      const count = visited.size - 1; // 排除自身
+      setStatus(`前置知识链：${count} 个前置节点 / ${pathEdges.length} 条路径边`, 'success');
+      console.log(`[前置路径] ${startNode.id()} → ${count} 个前置节点`);
+    }
+
+    /**
+     * Phase 3 - 绑定搜索与前置路径事件
+     */
+    function bindSearchEvents() {
+      const input = document.getElementById('searchInput');
+      const clear = document.getElementById('searchClear');
+      const count = document.getElementById('searchCount');
+
+      let debounceTimer;
+      input.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        const kw = input.value.trim();
+        clear.classList.toggle('hidden', !kw);
+        debounceTimer = setTimeout(() => searchNodes(kw), 250);
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          clearTimeout(debounceTimer);
+          searchNodes(input.value);
+        }
+        if (e.key === 'Escape') {
+          input.value = '';
+          clear.classList.add('hidden');
+          searchNodes('');
+        }
+      });
+      clear.addEventListener('click', () => {
+        input.value = '';
+        clear.classList.add('hidden');
+        searchNodes('');
+        input.focus();
+      });
+
+      // 前置路径按钮
+      document.getElementById('prereqBtn').addEventListener('click', tracePrereqs);
+    }
+
+    /**
+     * Phase 3 - 更新掌握度分布统计条
+     */
+    function updateMasteryStats() {
+      const counts = { none: 0, learning: 0, weak: 0, mastered: 0 };
+      for (const [, node] of AppData.nodes) {
+        const m = node.mastered || 'none';
+        if (counts[m] !== undefined) counts[m]++;
+      }
+      const total = AppData.nodes.size || 1;
+      const pct = v => Math.round((v / total) * 100) + '%';
+      // 未学条
+      document.getElementById('masteredBarNone').style.width = pct(counts.none);
+      document.getElementById('masteredCountNone').textContent = counts.none;
+      // 已学
+      document.getElementById('masteredBarLearning').style.width = pct(counts.learning);
+      document.getElementById('masteredCountLearning').textContent = counts.learning;
+      // 薄弱
+      document.getElementById('masteredBarWeak').style.width = pct(counts.weak);
+      document.getElementById('masteredCountWeak').textContent = counts.weak;
+      // 已掌握
+      document.getElementById('masteredBarMastered').style.width = pct(counts.mastered);
+      document.getElementById('masteredCountMastered').textContent = counts.mastered;
     }
   </script>
 
@@ -914,6 +1117,7 @@
         // UI 更新
         updateStats();
         renderGraph();                       // Phase 2：渲染图谱
+        updateMasteryStats();                // Phase 3：掌握度分布
         setUploadBadge('graph', 'success', file.name);
         setStatus('知识图谱加载成功：' + nodes.length + ' 节点 / ' + edges.length + ' 边', 'success');
       } catch (err) {
@@ -1013,6 +1217,9 @@
       // Phase 2：初始化 Cytoscape 实例 + 节点点击事件
       initCytoscape();
       bindNodeEvents();
+
+      // Phase 3：绑定搜索与前置路径事件
+      bindSearchEvents();
 
       // Phase 2：布局切换按钮
       document.querySelectorAll('.layout-btn').forEach(btn => {
