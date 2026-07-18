@@ -201,15 +201,15 @@
         </div>
       </div>
 
-      <!-- 分区标题：导航（占位，后续阶段启用） -->
+      <!-- 分区标题：导航 -->
       <div class="px-4 pt-2 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
         功能导航
       </div>
       <nav class="px-4 pb-4 flex flex-col gap-1">
         <button class="nav-btn text-left px-3 py-2 rounded-md text-sm bg-brand-600/20 text-brand-400 border border-brand-600/30" data-page="home">🏠 首页</button>
-        <button class="nav-btn text-left px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-700/50 transition-colors opacity-50 cursor-not-allowed" data-page="graph" title="第二阶段上线">🕸️ 知识图谱</button>
-        <button class="nav-btn text-left px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-700/50 transition-colors opacity-50 cursor-not-allowed" data-page="learn" title="第三阶段上线">📖 学习中心</button>
-        <button class="nav-btn text-left px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-700/50 transition-colors opacity-50 cursor-not-allowed" data-page="quiz" title="第四阶段上线">✏️ 刷题模式</button>
+        <button class="nav-btn text-left px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-700/50 transition-colors" data-page="graph">🕸️ 知识图谱</button>
+        <button class="nav-btn text-left px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-700/50 transition-colors" data-page="quiz">✏️ 刷题模式 <span id="quizNavBadge" class="text-xs text-slate-500"></span></button>
+        <button class="nav-btn text-left px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-700/50 transition-colors" data-page="wrongbook">📕 错题本 <span id="wrongNavBadge" class="text-xs text-rose-400"></span></button>
       </nav>
     </aside>
 
@@ -275,7 +275,7 @@
       </div>
 
       <!-- Phase 3：搜索框 + 前置路径按钮 -->
-      <div class="absolute top-4 left-72 z-20 flex items-center gap-1.5 bg-slate-800/80 border border-slate-700 rounded-lg px-2 py-1.5 backdrop-blur-sm">
+      <div id="searchBar" class="absolute top-4 left-72 z-20 flex items-center gap-1.5 bg-slate-800/80 border border-slate-700 rounded-lg px-2 py-1.5 backdrop-blur-sm">
         <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         <input id="searchInput" type="text" placeholder="搜索知识点..."
           class="bg-transparent text-xs text-slate-200 placeholder-slate-500 outline-none w-32">
@@ -313,6 +313,39 @@
               <option value="weak">薄弱</option>
               <option value="mastered">已掌握</option>
             </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 4：刷题模式界面 -->
+      <div id="quizView" class="hidden flex-1 overflow-y-auto p-6">
+        <div class="max-w-2xl mx-auto">
+          <!-- 刷题头部 -->
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-bold text-slate-100">✏️ 刷题模式</h2>
+            <div class="flex items-center gap-3 text-xs">
+              <span class="text-slate-400">进度：<span id="quizProgress" class="text-brand-400 stat-num">0/0</span></span>
+              <span class="text-slate-400">正确率：<span id="quizAccuracy" class="text-emerald-400 stat-num">—</span></span>
+            </div>
+          </div>
+          <!-- 学科筛选 -->
+          <div id="quizFilter" class="flex flex-wrap gap-1.5 mb-4"></div>
+          <!-- 题卡 -->
+          <div id="quizCard" class="bg-slate-800/70 border border-slate-700 rounded-xl p-6 min-h-96">
+            <div class="text-center text-slate-500 mt-20">请先上传题库 CSV</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 4：错题本界面 -->
+      <div id="wrongView" class="hidden flex-1 overflow-y-auto p-6">
+        <div class="max-w-2xl mx-auto">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-bold text-slate-100">📕 错题本</h2>
+            <span id="wrongCount" class="text-xs text-slate-400">共 0 道</span>
+          </div>
+          <div id="wrongList" class="space-y-3">
+            <div class="text-center text-slate-500 mt-20">暂无错题，去刷题吧~</div>
           </div>
         </div>
       </div>
@@ -782,7 +815,267 @@
     }
 
     /**
-     * Phase 3 - 更新掌握度分布统计条
+     * Phase 3 - 更新掌握度分布统计条（定义在前，实现在后）
+     */
+    function updateMasteryStats() { /* moved below for clarity */ }
+
+    /**
+     * Phase 4 - 错题本数据（localStorage 持久化）
+     */
+    const WrongBook = {
+      items: JSON.parse(localStorage.getItem('kgraph.wrongbook') || '[]'),
+      add(q) {
+        const exists = this.items.find(w => w.question === q.question);
+        if (!exists) {
+          this.items.push({ ...q, wrongCount: 1, lastWrong: Date.now() });
+        } else {
+          exists.wrongCount++;
+          exists.lastWrong = Date.now();
+        }
+        this.save();
+      },
+      remove(question) {
+        this.items = this.items.filter(w => w.question !== question);
+        this.save();
+      },
+      clear() { this.items = []; this.save(); },
+      save() { localStorage.setItem('kgraph.wrongbook', JSON.stringify(this.items)); }
+    };
+
+    /**
+     * Phase 4 - 刷题状态
+     */
+    const Quiz = {
+      current: null,        // 当前题目对象
+      index: 0,             // 当前题库索引
+      pool: [],             // 当前题库池（过滤后）
+      total: 0, answered: 0, correct: 0,
+      filterKP: '',         // 当前知识点筛选
+      init() {
+        // 仅用有关联知识点的题
+        this.pool = AppData.questions.filter(q => q.kp && q.kp.trim());
+        this.total = this.pool.length;
+        this.answered = 0; this.correct = 0;
+        this.index = 0;
+        this.renderFilter();
+        this.next();
+      },
+      renderFilter() {
+        // 提取全部知识点标签（bench 文件格式：task_label|kp）
+        const kps = new Set();
+        AppData.questions.forEach(q => {
+          if (q.kp) q.kp.split('|').forEach(k => k && kps.add(k.trim()));
+        });
+        const container = document.getElementById('quizFilter');
+        container.innerHTML = '';
+        const allBtn = document.createElement('button');
+        allBtn.className = 'quiz-kp-btn px-2 py-0.5 text-xs rounded border ' + (!this.filterKP ? 'bg-brand-600/30 text-brand-400 border-brand-600/40' : 'border-slate-600 text-slate-400 hover:bg-slate-700/50');
+        allBtn.textContent = '全部';
+        allBtn.addEventListener('click', () => { this.filterKP = ''; this.init(); });
+        container.appendChild(allBtn);
+        kps.forEach(kp => {
+          const btn = document.createElement('button');
+          btn.className = 'quiz-kp-btn px-2 py-0.5 text-xs rounded border ' + (this.filterKP === kp ? 'bg-brand-600/30 text-brand-400 border-brand-600/40' : 'border-slate-600 text-slate-400 hover:bg-slate-700/50');
+          btn.textContent = kp;
+          btn.addEventListener('click', () => { this.filterKP = kp; this.filterByKP(kp); });
+          container.appendChild(btn);
+        });
+      },
+      filterByKP(kp) {
+        this.pool = AppData.questions.filter(q => q.kp && q.kp.split('|').some(k => k.trim() === kp));
+        this.total = this.pool.length;
+        this.answered = 0; this.correct = 0;
+        this.index = 0;
+        this.renderFilter();
+        this.next();
+      },
+      next() {
+        if (this.pool.length === 0) {
+          document.getElementById('quizCard').innerHTML = '<div class="text-center text-slate-500 mt-20">该筛选下无题目</div>';
+          return;
+        }
+        if (this.index >= this.pool.length) { this.showSummary(); return; }
+        this.current = this.pool[this.index];
+        this.renderQuestion();
+      },
+      renderQuestion() {
+        const q = this.current;
+        const opts = q.options;
+        const optsHtml = ['A','B','C','D'].map(k => {
+          const text = opts[k];
+          if (!text) return '';
+          return `<button class="quiz-opt w-full text-left p-3 rounded-lg border border-slate-600 bg-slate-700/50 hover:bg-slate-700 hover:border-brand-500 transition-all text-sm text-slate-200" data-opt="${k}">
+            <span class="font-bold text-brand-400 mr-2">${k}.</span>${text}
+          </button>`;
+        }).join('');
+        const card = document.getElementById('quizCard');
+        card.innerHTML = `
+          <div class="text-xs text-slate-400 mb-1">第 ${this.index + 1} / ${this.pool.length} 题 <span class="ml-2 px-1.5 py-0.5 rounded bg-slate-700/60">${q.kp || ''}</span></div>
+          <div class="text-sm text-slate-200 mb-5 leading-relaxed">${q.question}</div>
+          <div class="space-y-2">${optsHtml}</div>`;
+        document.getElementById('quizProgress').textContent = `${this.answered}/${this.total}`;
+        document.getElementById('quizAccuracy').textContent = this.answered > 0 ? Math.round((this.correct/this.answered)*100)+'%' : '—';
+        // 绑定选项点击
+        card.querySelectorAll('.quiz-opt').forEach(btn => {
+          btn.addEventListener('click', () => this.answer(btn.dataset.opt, btn));
+        });
+      },
+      answer(opt, btn) {
+        const q = this.current;
+        const correct = opt === q.answer;
+        this.answered++;
+        if (correct) this.correct++;
+        // 视觉反馈
+        document.querySelectorAll('.quiz-opt').forEach(b => {
+          b.disabled = true;
+          b.classList.add('cursor-not-allowed', 'opacity-60');
+        });
+        btn.classList.remove('opacity-60', 'border-slate-600');
+        if (correct) {
+          btn.classList.add('bg-emerald-500/20', 'border-emerald-500', 'text-emerald-300');
+        } else {
+          btn.classList.add('bg-rose-500/20', 'border-rose-500', 'text-rose-300');
+          // 标出正确答案
+          document.querySelector(`.quiz-opt[data-opt="${q.answer}"]`)?.classList.add('bg-emerald-500/20','border-emerald-500','text-emerald-300');
+          // 收录错题本
+          WrongBook.add(q);
+          updateWrongBookUI();
+        }
+        // 进度
+        document.getElementById('quizProgress').textContent = `${this.answered}/${this.total}`;
+        document.getElementById('quizAccuracy').textContent = Math.round((this.correct/this.answered)*100)+'%';
+        // 下一题按钮
+        const nextBtn = document.createElement('button');
+        nextBtn.id = 'quizNextBtn';
+        nextBtn.className = 'mt-4 w-full py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-sm transition-colors';
+        nextBtn.textContent = this.index + 1 >= this.pool.length ? '查看总结' : '下一题 →';
+        nextBtn.addEventListener('click', () => { this.index++; this.next(); });
+        document.getElementById('quizCard').appendChild(nextBtn);
+      },
+      showSummary() {
+        const acc = this.answered > 0 ? Math.round((this.correct/this.answered)*100) : 0;
+        document.getElementById('quizCard').innerHTML = `
+          <div class="text-center py-8">
+            <div class="text-4xl font-bold ${acc >= 80 ? 'text-emerald-400' : acc >= 60 ? 'text-amber-400' : 'text-rose-400'}">${acc}%</div>
+            <div class="text-slate-400 mt-2">答对 ${this.correct} / ${this.answered} 题</div>
+            <button id="quizRestart" class="mt-6 px-6 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-sm">再来一组</button>
+          </div>`;
+        document.getElementById('quizRestart').addEventListener('click', () => this.init());
+      }
+    };
+
+    /**
+     * Phase 4 - 错题本 UI 渲染
+     */
+    function updateWrongBookUI() {
+      const list = document.getElementById('wrongList');
+      document.getElementById('wrongCount').textContent = `共 ${WrongBook.items.length} 道`;
+      document.getElementById('wrongNavBadge').textContent = WrongBook.items.length > 0 ? `(${WrongBook.items.length})` : '';
+      if (WrongBook.items.length === 0) {
+        list.innerHTML = '<div class="text-center text-slate-500 mt-20">暂无错题，去刷题吧~</div>';
+        return;
+      }
+      list.innerHTML = WrongBook.items.map((w, i) => {
+        const opts = w.options;
+        const optsHtml = ['A','B','C','D'].map(k => `<div class="text-xs ${k===w.answer ? 'text-emerald-400 font-bold' : 'text-slate-400'}">${k}. ${opts[k]||''}</div>`).join('');
+        const kp = w.kp ? w.kp.split('|').pop() : '';
+        return `<div class="bg-slate-800/70 border border-slate-700 rounded-lg p-4">
+          <div class="flex items-start justify-between mb-2">
+            <div class="text-sm text-slate-200 flex-1 mr-2">${i+1}. ${w.question}</div>
+            <span class="text-xs text-rose-400 shrink-0">×${w.wrongCount}</span>
+          </div>
+          <div class="mb-2">${optsHtml}</div>
+          <div class="flex items-center justify-between">
+            ${kp ? `<span class="text-xs px-1.5 py-0.5 rounded bg-brand-600/20 text-brand-400 cursor-pointer hover:bg-brand-600/30" onclick="searchNodeByLabel('${kp.replace(/'/g,"\\'")}')">🔍 ${kp}</span>` : '<span></span>'}
+            <button class="text-xs text-slate-500 hover:text-rose-400 wrong-remove" data-idx="${i}">已掌握，移除</button>
+          </div>
+        </div>`;
+      }).join('');
+      // 绑定移除
+      document.querySelectorAll('.wrong-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.dataset.idx);
+          WrongBook.items.splice(idx, 1);
+          WrongBook.save();
+          updateWrongBookUI();
+        });
+      });
+    }
+
+    /**
+     * Phase 4 - 根据知识点标签搜索并高亮节点
+     */
+    function searchNodeByLabel(label) {
+      // 切换到图谱视图并搜索
+      switchView('graph');
+      const input = document.getElementById('searchInput');
+      input.value = label;
+      searchNodes(label);
+    }
+
+    /**
+     * Phase 4 - 视图切换统一入口
+     */
+    function switchView(page) {
+      const cyDiv = document.getElementById('cy');
+      const toolbar = document.getElementById('graphToolbar');
+      const searchBar = document.getElementById('searchBar');
+      const legend = document.getElementById('legendPanel');
+      const quiz = document.getElementById('quizView');
+      const wrong = document.getElementById('wrongView');
+      const welcome = document.getElementById('welcomeCard');
+
+      // 全部隐藏
+      [quiz, wrong].forEach(el => el && el.classList.add('hidden'));
+      if (welcome) welcome.classList.add('hidden');
+
+      if (page === 'home') {
+        if (AppData.nodes.size > 0) {
+          // 有数据 → 回图谱
+          cyDiv.classList.remove('hidden');
+          cyDiv.classList.add('flex-1');
+          toolbar?.classList.remove('hidden');
+          searchBar?.classList.remove('hidden');
+          legend?.classList.remove('hidden');
+        } else {
+          welcome.classList.remove('hidden');
+        }
+      } else if (page === 'graph') {
+        cyDiv.classList.remove('hidden');
+        cyDiv.classList.add('flex-1');
+        toolbar?.classList.remove('hidden');
+        searchBar?.classList.remove('hidden');
+        legend?.classList.remove('hidden');
+      } else if (page === 'quiz') {
+        quiz.classList.remove('hidden');
+        quiz.classList.add('flex-1');
+        cyDiv.classList.add('hidden');
+        toolbar?.classList.add('hidden');
+        searchBar?.classList.add('hidden');
+        legend?.classList.add('hidden');
+        Quiz.init();
+      } else if (page === 'wrongbook') {
+        wrong.classList.remove('hidden');
+        wrong.classList.add('flex-1');
+        cyDiv.classList.add('hidden');
+        toolbar?.classList.add('hidden');
+        searchBar?.classList.add('hidden');
+        legend?.classList.add('hidden');
+        updateWrongBookUI();
+      }
+
+      // 更新侧栏按钮高亮
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        const isActive = btn.dataset.page === page || (page === 'home' && btn.dataset.page === 'home');
+        btn.className = 'nav-btn text-left px-3 py-2 rounded-md text-sm transition-colors ' +
+          (isActive ? 'bg-brand-600/20 text-brand-400 border border-brand-600/30' : 'text-slate-300 hover:bg-slate-700/50');
+      });
+
+      setStatus(page === 'quiz' ? '刷题模式 — 选择答案自动判分' : page === 'wrongbook' ? '错题本 — 点击知识点可跳转图谱' : '就绪', 'info');
+    }
+
+    /**
+     * Phase 3 - 更新掌握度分布统计条（实现）
      */
     function updateMasteryStats() {
       const counts = { none: 0, learning: 0, weak: 0, mastered: 0 };
@@ -1229,18 +1522,9 @@
         if (AppData.cy) AppData.cy.fit(null, 30);
       });
 
-      // 导航按钮点击（仅首页可点，其余为占位）
+      // 导航按钮点击 → 视图切换（Phase 4）
       document.querySelectorAll('.nav-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const page = btn.dataset.page;
-          if (page === 'home') {
-            checkWelcomeVisibility();
-            setStatus('就绪 · 首页', 'info');
-          } else {
-            // 未上线功能提示
-            setStatus('该功能将在后续阶段上线：' + btn.textContent.trim(), 'info');
-          }
-        });
+        btn.addEventListener('click', () => switchView(btn.dataset.page));
       });
 
       // 主题切换按钮（占位提示）
