@@ -440,7 +440,7 @@
         { selector: 'node.search-hit', style: {
           'border-width': 3, 'border-color': '#facc15',
           'background-color': '#facc15',
-          'width': 22, 'height': 22',
+          'width': 22, 'height': 22,
           'z-index': 999,
         }},
         // Phase 3：前置路径高亮（琥珀色边）
@@ -1356,7 +1356,7 @@
     function persistToStorage() {
       try {
         // Map → 普通数组序列化
-        localStorage.setItem(STORAGE_KEYS.nodes, JSON.stringify(AppData.nodes.map(n => ({
+        localStorage.setItem(STORAGE_KEYS.nodes, JSON.stringify(Array.from(AppData.nodes, ([id, n]) => ({
           ...n, refs: Array.from(n.refs)
         }))));
         localStorage.setItem(STORAGE_KEYS.edges, JSON.stringify(AppData.edges));
@@ -1364,6 +1364,32 @@
         localStorage.setItem(STORAGE_KEYS.questions, JSON.stringify(AppData.questions));
       } catch (e) {
         console.warn('localStorage 写入失败（可能是隐私模式或存储已满）：', e);
+      }
+    }
+
+    /**
+     * 从 localStorage 恢复数据（页面加载时调用）
+     */
+    function restoreFromStorage() {
+      try {
+        const rawNodes = JSON.parse(localStorage.getItem(STORAGE_KEYS.nodes));
+        if (rawNodes && rawNodes.length > 0) {
+          AppData.nodes.clear();
+          rawNodes.forEach(n => AppData.nodes.set(n.id, { ...n, refs: new Set(n.refs) }));
+        }
+        const rawEdges = JSON.parse(localStorage.getItem(STORAGE_KEYS.edges));
+        if (rawEdges) AppData.edges = rawEdges;
+        const rawRels = JSON.parse(localStorage.getItem(STORAGE_KEYS.relations));
+        if (rawRels) AppData.relations = new Set(rawRels);
+        const rawQs = JSON.parse(localStorage.getItem(STORAGE_KEYS.questions));
+        if (rawQs) AppData.questions = rawQs;
+        // 更新统计
+        AppData.stats.nodeCount = AppData.nodes.size;
+        AppData.stats.edgeCount = AppData.edges.length;
+        AppData.stats.relationTypes = AppData.relations.size;
+        AppData.stats.questionCount = AppData.questions.length;
+      } catch (e) {
+        console.warn('localStorage 读取失败：', e);
       }
     }
   </script>
@@ -1534,6 +1560,14 @@
 
       // 初始化统计显示
       updateStats();
+
+      // 从 localStorage 恢复已保存的数据
+      restoreFromStorage();
+      if (AppData.nodes.size > 0) {
+        renderGraph();
+        updateMasteryStats();
+        updateStats();
+      }
 
       // Phase 2：根据数据显示欢迎卡片或图谱
       checkWelcomeVisibility();
