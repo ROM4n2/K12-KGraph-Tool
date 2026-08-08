@@ -10,21 +10,40 @@
   <script src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
-  <!-- Tailwind 自定义配置：扩展深色主题色与字体 -->
+  <!-- Tailwind 配置：夜空星空色板 -->
   <script>
     tailwind.config = {
       theme: {
         extend: {
           colors: {
-            // 自定义品牌色（青蓝系，契合学习/科技感）
+            // slate 重映射为靛蓝夜空梯度（所有现有 slate-* 类自动跟随）
+            slate: {
+              50:  '#1A1F38',
+              100: '#E8EDFB',
+              200: '#D8DEF0',
+              300: '#B8C0D8',
+              400: '#8B94B8',
+              500: '#6B7494',
+              600: '#2A3560',
+              700: '#1F2748',
+              800: '#141B36',
+              900: '#090D1F',
+            },
+            // brand 重映射为星光青蓝
             brand: {
-              50:  '#eef9ff',
-              100: '#d9f0ff',
-              400: '#38bdf8',
-              500: '#0ea5e9',
-              600: '#0284c7',
-              700: '#0369a1',
-            }
+              50:  '#0A1830',
+              100: '#0F2540',
+              400: '#57C7FF',
+              500: '#3DB5F0',
+              600: '#2A9FD6',
+              700: '#1F7AAB',
+            },
+            // 金色：已掌握 / 选中星光
+            gold: {
+              400: '#F4C95D',
+              500: '#E8B847',
+              600: '#D4A63A',
+            },
           },
           fontFamily: {
             sans: ['"PingFang SC"', '"Microsoft YaHei"', 'system-ui', 'sans-serif']
@@ -34,42 +53,43 @@
     };
   </script>
 
-  <!-- ===== 2. 自定义 CSS：滚动条 / 拖拽高亮 / 动画 ===== -->
+  <!-- ===== 2. 自定义 CSS：夜空底色 / 滚动条 / 动画 ===== -->
   <style>
-    /* 全局基础样式：深色主题底色 */
     html, body { height: 100%; }
     body {
-      background-color: #0f172a; /* slate-900 */
-      color: #e2e8f0;            /* slate-200 */
-      overflow: hidden;          /* 由内部容器滚动，避免整页滚动条 */
+      background-color: #090D1F; /* night */
+      color: #E8EDFB;            /* star */
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
-    /* 自定义滚动条（webkit 内核） */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: #1e293b; }
-    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    ::-webkit-scrollbar-track { background: #090D1F; }
+    ::-webkit-scrollbar-thumb { background: #2A3560; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3D4870; }
 
-    /* 拖拽悬停高亮态（给上传区用） */
     .drag-active {
-      border-color: #38bdf8 !important;
-      background-color: rgba(56, 189, 248, 0.08) !important;
-      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+      border-color: #57C7FF !important;
+      background-color: rgba(87, 199, 255, 0.08) !important;
+      box-shadow: 0 0 0 3px rgba(87, 199, 255, 0.15);
     }
 
-    /* 旋转动画（解析中状态指示） */
     @keyframes spin { to { transform: rotate(360deg); } }
     .spin { animation: spin 0.8s linear infinite; }
 
-    /* 主内容区 Cytoscape 容器（第二阶段启用，第一阶段隐藏） */
+    /* 星空渐入：首次渲染图谱时触发 */
+    @keyframes nightfall { from { opacity: 0; } to { opacity: 1; } }
+    .starlight-in { animation: nightfall 700ms ease-out; }
+    @media (prefers-reduced-motion: reduce) { .starlight-in { animation: none; } }
+
     #cy {
       width: 100%;
       height: 100%;
-      background-color: #0b1220;
+      background: radial-gradient(ellipse at center, #0D1430 0%, #090D1F 100%);
     }
 
-    /* 统计数字强调色 */
-    .stat-num { font-variant-numeric: tabular-nums; }
+    .stat-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
   </style>
 </head>
 
@@ -78,22 +98,25 @@
 
   <!-- ==================== 顶部导航栏 ==================== -->
   <header class="h-14 flex items-center justify-between px-5 bg-slate-800/70 border-b border-slate-700 backdrop-blur-sm shrink-0">
-    <!-- 左侧：Logo + 标题 -->
+    <!-- 左侧：星座 Logo + 标题 -->
     <div class="flex items-center gap-3">
-      <!-- SVG Logo（书本+节点图标） -->
-      <svg class="w-8 h-8 text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-        <circle cx="9" cy="8" r="1.2" fill="currentColor" />
-        <circle cx="15" cy="11" r="1.2" fill="currentColor" />
-        <line x1="9.5" y1="9.2" x2="14.5" y2="9.8" />
+      <svg class="w-8 h-8 text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="5" y1="6" x2="12" y2="11" opacity="0.5" />
+        <line x1="12" y1="11" x2="19" y2="7" opacity="0.5" />
+        <line x1="12" y1="11" x2="9" y2="18" opacity="0.5" />
+        <line x1="9" y1="18" x2="16" y2="20" opacity="0.5" />
+        <circle cx="5" cy="6" r="1.3" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="11" r="1.8" fill="currentColor" stroke="none" />
+        <circle cx="19" cy="7" r="1.3" fill="currentColor" stroke="none" />
+        <circle cx="9" cy="18" r="1.3" fill="currentColor" stroke="none" />
+        <circle cx="16" cy="20" r="1" fill="currentColor" stroke="none" />
       </svg>
-      <h1 class="text-lg font-semibold tracking-wide text-slate-100">K12 知识图谱学习工具</h1>
+      <h1 class="text-lg font-bold tracking-wider text-slate-100">K12 知识图谱学习工具</h1>
     </div>
 
-    <!-- 右侧：主题切换按钮（占位，第二阶段实现） -->
+    <!-- 右侧：主题切换按钮（占位） -->
     <button id="themeToggle" class="px-3 py-1.5 text-sm rounded-md bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors" title="切换主题（即将上线）">
-      🌙 深色
+      ✦ 星夜
     </button>
   </header>
 
@@ -154,7 +177,7 @@
         </div>
         <div class="bg-slate-800/60 border border-slate-700 rounded-lg p-3">
           <div class="text-xs text-slate-400">边数</div>
-          <div id="statEdges" class="text-xl font-bold text-emerald-400 stat-num">0</div>
+          <div id="statEdges" class="text-xl font-bold text-gold-400 stat-num">0</div>
         </div>
         <div class="bg-slate-800/60 border border-slate-700 rounded-lg p-3">
           <div class="text-xs text-slate-400">题目数</div>
@@ -179,11 +202,11 @@
           <span id="masteredCountNone" class="text-slate-400 stat-num w-10 text-right">0</span>
         </div>
         <div class="flex items-center justify-between text-xs">
-          <span class="text-slate-400 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span>已学</span>
+          <span class="text-slate-400 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-brand-500"></span>已学</span>
           <div class="flex-1 mx-2 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-            <div id="masteredBarLearning" class="h-full bg-blue-500 rounded-full transition-all" style="width:0%"></div>
+            <div id="masteredBarLearning" class="h-full bg-brand-500 rounded-full transition-all" style="width:0%"></div>
           </div>
-          <span id="masteredCountLearning" class="text-blue-400 stat-num w-10 text-right">0</span>
+          <span id="masteredCountLearning" class="text-brand-400 stat-num w-10 text-right">0</span>
         </div>
         <div class="flex items-center justify-between text-xs">
           <span class="text-slate-400 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span>薄弱</span>
@@ -193,11 +216,11 @@
           <span id="masteredCountWeak" class="text-amber-400 stat-num w-10 text-right">0</span>
         </div>
         <div class="flex items-center justify-between text-xs">
-          <span class="text-slate-400 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>已掌握</span>
+          <span class="text-slate-400 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-gold-500"></span>已掌握</span>
           <div class="flex-1 mx-2 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-            <div id="masteredBarMastered" class="h-full bg-emerald-500 rounded-full transition-all" style="width:0%"></div>
+            <div id="masteredBarMastered" class="h-full bg-gold-500 rounded-full transition-all" style="width:0%"></div>
           </div>
-          <span id="masteredCountMastered" class="text-emerald-400 stat-num w-10 text-right">0</span>
+          <span id="masteredCountMastered" class="text-gold-400 stat-num w-10 text-right">0</span>
         </div>
       </div>
 
@@ -219,20 +242,24 @@
       <!-- 欢迎卡片（第一阶段占位） -->
       <div id="welcomeCard" class="absolute inset-0 flex items-center justify-center p-6 z-10">
         <div class="max-w-lg w-full bg-slate-800/70 border border-slate-700 rounded-2xl p-8 shadow-2xl backdrop-blur-sm">
-          <!-- 大 Logo -->
+          <!-- 星座 Logo -->
           <div class="flex justify-center mb-5">
-            <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-700 flex items-center justify-center shadow-lg">
-              <svg class="w-9 h-9 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                <circle cx="9" cy="8" r="1.4" fill="currentColor" />
-                <circle cx="15" cy="11" r="1.4" fill="currentColor" />
-                <line x1="9.5" y1="9.4" x2="14.5" y2="10" />
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-700 flex items-center justify-center shadow-lg shadow-brand-500/20">
+              <svg class="w-9 h-9 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="6" x2="12" y2="11" opacity="0.4" />
+                <line x1="12" y1="11" x2="19" y2="7" opacity="0.4" />
+                <line x1="12" y1="11" x2="9" y2="18" opacity="0.4" />
+                <line x1="9" y1="18" x2="16" y2="20" opacity="0.4" />
+                <circle cx="5" cy="6" r="1.5" fill="currentColor" stroke="none" />
+                <circle cx="12" cy="11" r="2" fill="currentColor" stroke="none" />
+                <circle cx="19" cy="7" r="1.5" fill="currentColor" stroke="none" />
+                <circle cx="9" cy="18" r="1.5" fill="currentColor" stroke="none" />
+                <circle cx="16" cy="20" r="1.2" fill="currentColor" stroke="none" />
               </svg>
             </div>
           </div>
-          <h2 class="text-2xl font-bold text-center text-slate-100 mb-2">欢迎使用 K12 知识图谱学习工具</h2>
-          <p class="text-center text-slate-400 mb-6 text-sm">本地离线 · 隐私安全 · 专注学习</p>
+          <h2 class="text-2xl font-bold text-center text-slate-100 mb-2">把知识，挂上夜空</h2>
+          <p class="text-center text-slate-400 mb-6 text-sm tracking-wide">逐星而学 · 本地离线 · 隐私安全</p>
 
           <!-- 三步引导 -->
           <div class="space-y-3">
@@ -251,10 +278,10 @@
               </div>
             </div>
             <div class="flex items-center gap-3 p-3 rounded-lg bg-slate-700/40 border border-slate-600/50">
-              <span class="flex items-center justify-center w-8 h-8 rounded-full bg-brand-600/30 text-brand-400 font-bold text-sm shrink-0">3</span>
+              <span class="flex items-center justify-center w-8 h-8 rounded-full bg-gold-500/20 text-gold-400 font-bold text-sm shrink-0">3</span>
               <div>
-                <div class="text-sm font-medium text-slate-200">开启学习之旅</div>
-                <div class="text-xs text-slate-400">知识图谱 · 学习路径 · 刷题巩固</div>
+                <div class="text-sm font-medium text-slate-200">点亮你的知识星空</div>
+                <div class="text-xs text-slate-400">图谱探索 · 前置路径 · 刷题巩固</div>
               </div>
             </div>
           </div>
@@ -307,7 +334,7 @@
           </div>
           <div class="pt-2 border-t border-slate-700">
             <span class="text-slate-400">掌握度：</span>
-            <select id="npMastered" class="ml-2 bg-slate-700 text-slate-200 text-xs rounded px-2 py-1 border border-slate-600">
+            <select id="npMastered" title="掌握度" class="ml-2 bg-slate-700 text-slate-200 text-xs rounded px-2 py-1 border border-slate-600">
               <option value="none">未学</option>
               <option value="learning">已学</option>
               <option value="weak">薄弱</option>
@@ -361,11 +388,11 @@
     <div class="flex items-center gap-4">
       <span>节点 <b id="footNodes" class="text-brand-400 stat-num">0</b></span>
       <span class="text-slate-600">|</span>
-      <span>边 <b id="footEdges" class="text-emerald-400 stat-num">0</b></span>
+      <span>边 <b id="footEdges" class="text-gold-400 stat-num">0</b></span>
       <span class="text-slate-600">|</span>
       <span>题目 <b id="footQuestions" class="text-amber-400 stat-num">0</b></span>
       <span class="text-slate-600">|</span>
-      <span class="text-slate-500">v0.1.0 · Phase 1</span>
+      <span class="text-slate-500">v0.4.0 · Phase 4</span>
     </div>
   </footer>
 
@@ -397,7 +424,7 @@
     };
 
     // 版本信息
-    const APP_VERSION = 'v0.2.0 · Phase 2';
+    const APP_VERSION = 'v0.4.0 · Phase 4';
   </script>
 
   <!-- ===== 9. Cytoscape 图谱引擎 ===== -->
@@ -407,46 +434,80 @@
      */
     function buildGlobalStyle() {
       return [
+        // 基础节点：暗星（未学）-- mastery-as-starlight 签名
         { selector: 'node', style: {
-          'background-color': '#38bdf8',
+          'background-color': '#3A4570',
           'label': 'data(label)',
-          'color': '#e2e8f0',
+          'color': '#8B94B8',
           'font-size': '10px',
           'text-valign': 'bottom',
           'text-margin-y': 4,
-          'width': 18, 'height': 18,
-          'border-width': 1, 'border-color': '#0ea5e9',
-          'text-background-color': '#0f172a',
-          'text-background-opacity': 0.8,
+          'width': 16, 'height': 16,
+          'border-width': 1, 'border-color': '#2A3560',
+          'text-background-color': '#090D1F',
+          'text-background-opacity': 0.85,
           'text-background-padding': 2,
+          'opacity': 0.55,
         }},
+        // 已学：青蓝星
+        { selector: 'node[mastery = "learning"]', style: {
+          'background-color': '#57C7FF',
+          'border-color': '#57C7FF',
+          'border-width': 2,
+          'opacity': 0.85,
+          'width': 18, 'height': 18,
+        }},
+        // 薄弱：琥珀星
+        { selector: 'node[mastery = "weak"]', style: {
+          'background-color': '#F59E0B',
+          'border-color': '#F59E0B',
+          'border-width': 2,
+          'opacity': 0.85,
+          'width': 18, 'height': 18,
+        }},
+        // 已掌握：金星发光
+        { selector: 'node[mastery = "mastered"]', style: {
+          'background-color': '#F4C95D',
+          'border-color': '#F4C95D',
+          'border-width': 2,
+          'opacity': 1,
+          'width': 20, 'height': 20,
+          'shadow-color': '#F4C95D',
+          'shadow-blur': 8,
+          'shadow-opacity': 0.5,
+        }},
+        // 边
         { selector: 'edge', style: {
           'width': 1.5,
           'curve-style': 'bezier',
           'target-arrow-shape': 'triangle',
-          'target-arrow-color': '#94a3b8',
-          'line-color': '#94a3b8',
-          'opacity': 0.6,
+          'target-arrow-color': '#3D4870',
+          'line-color': '#3D4870',
+          'opacity': 0.5,
         }},
+        // 选中节点（覆盖 mastery 配色）
         { selector: 'node:selected', style: {
-          'border-width': 3, 'border-color': '#fbbf24',
-          'width': 24, 'height': 24,
+          'border-width': 3, 'border-color': '#E8EDFB',
+          'width': 26, 'height': 26,
+          'opacity': 1,
         }},
+        // 邻居高亮
         { selector: 'node.highlight', style: {
-          'border-width': 3, 'border-color': '#fbbf24',
-          'background-color': '#fbbf24',
+          'border-width': 2, 'border-color': '#E8EDFB',
+          'opacity': 1,
         }},
-        // Phase 3：搜索命中高亮（脉冲黄边 + 放大）
+        // 搜索命中
         { selector: 'node.search-hit', style: {
-          'border-width': 3, 'border-color': '#facc15',
-          'background-color': '#facc15',
+          'border-width': 3, 'border-color': '#F4C95D',
+          'background-color': '#F4C95D',
           'width': 22, 'height': 22,
+          'opacity': 1,
           'z-index': 999,
         }},
-        // Phase 3：前置路径高亮（琥珀色边）
+        // 前置路径高亮
         { selector: 'edge.prereq-path', style: {
-          'width': 3, 'line-color': '#f59e0b',
-          'target-arrow-color': '#f59e0b',
+          'width': 3, 'line-color': '#F59E0B',
+          'target-arrow-color': '#F59E0B',
           'opacity': 1, 'z-index': 999,
         }},
       ];
@@ -519,6 +580,9 @@
       const cyDiv = document.getElementById('cy');
       cyDiv.classList.remove('hidden');
       cyDiv.classList.add('flex-1');
+      // 星空渐入动画
+      cyDiv.classList.add('starlight-in');
+      setTimeout(() => cyDiv.classList.remove('starlight-in'), 700);
 
       // 清空旧数据
       cy.elements().remove();
@@ -526,7 +590,7 @@
       // 注入节点
       const nodeEls = [];
       for (const [id, node] of AppData.nodes) {
-        nodeEls.push({ data: { id: id, label: node.label || id } });
+        nodeEls.push({ data: { id: id, label: node.label || id, mastery: node.mastered || 'none' } });
       }
       cy.add(nodeEls);
 
@@ -658,6 +722,7 @@
         const nodeData = AppData.nodes.get(nodeId);
         if (nodeData) {
           nodeData.mastered = e.target.value;
+          if (AppData.cy) AppData.cy.getElementById(nodeId).data('mastery', e.target.value);
           persistToStorage();
           updateMasteryStats();
         }
@@ -1574,7 +1639,7 @@
 
       // 控制台欢迎信息
       console.log('%c[K12 知识图谱学习工具] ' + APP_VERSION + ' 已启动',
-        'color: #38bdf8; font-weight: bold;');
+        'color: #57C7FF; font-weight: bold;');
       console.log('请在左侧上传知识图谱 CSV 与题库 CSV 开始使用。');
     });
   </script>
